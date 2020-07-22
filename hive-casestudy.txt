@@ -1,0 +1,626 @@
+-- 1.Pre-requisite 
+ADD JAR /opt/cloudera/parcels/CDH/lib/hive/lib/hive-hcatalog-core-1.1.0-cdh5.11.2.jar;
+
+SET hive.exec.max.dynamic.partitions=100000;
+SET hive.exec.max.dynamic.partitions.pernode=100000;
+
+-- 2.creating workspace  
+--drop database
+drop database nyc_taxi_0714 CASCADE;
+
+--Creating database
+create database if not exists nyc_taxi_0714;
+use nyc_taxi_0714;
+
+
+-- --Loading Data
+-- --dropping table if exists
+-- drop table nyc_taxi_august;
+
+--Creating external table3
+create external table if not exists nyc_taxi_august(
+VendorID int,
+tpep_pickup_datetime timestamp,
+tpep_dropoff_datetime timestamp,
+passenger_count int,
+trip_distance decimal(10,2),
+RatecodeID int,
+store_and_fwd_flag string,
+PULocationID int,
+DOLocationID int,
+payment_type int,
+fare_amount decimal(10,2),
+extra decimal(10,2),
+mta_tax decimal(10,2),
+tip_amount decimal(10,2),
+tolls_amount decimal(10,2),
+improvement_surcharge decimal(10,2),
+total_amount decimal(10,2)
+)
+
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+STORED AS TEXTFILE
+LOCATION '/common_folder/nyc_taxi_data/'
+tblproperties ("skip.header.line.count"="2"); 
+-- skipping the header and blank row
+
+select * from nyc_taxi_august;
+select count(*) from nyc_taxi_august;
+
+-- 4.Basic Data Quality Checks
+-- 1.How many records has each TPEP provider provided? 
+-- Write a query that summarises the number of records of each provider.
+select vendorid, count(*) as Number_of_records
+from nyc_taxi_august
+group by vendorid;
+
+
+--Checking for empty cells
+
+select sum(case when vendorid is null then 1 else 0 end) vendorid,
+sum(case when tpep_pickup_datetime is null then 1 else 0 end) tpep_pickup_datetime,
+sum(case when tpep_dropoff_datetime is null then 1 else 0 end) tpep_dropoff_datetime,
+sum(case when 	passenger_count 	 is null then 1 else 0 end) 	passenger_count 	,
+sum(case when 	trip_distance 	 is null then 1 else 0 end) 	trip_distance 	,
+sum(case when 	RatecodeID 	 is null then 1 else 0 end) 	RatecodeID 	,
+sum(case when 	store_and_fwd_flag 	 is null then 1 else 0 end) 	store_and_fwd_flag 	,
+sum(case when 	PULocationID 	 is null then 1 else 0 end) 	PULocationID 	,
+sum(case when 	DOLocationID 	 is null then 1 else 0 end) 	DOLocationID 	,
+sum(case when 	payment_type 	 is null then 1 else 0 end) 	payment_type 	,
+sum(case when 	fare_amount 	 is null then 1 else 0 end) 	fare_amount 	,
+sum(case when 	extra 	 is null then 1 else 0 end) 	extra 	,
+sum(case when 	mta_tax 	 is null then 1 else 0 end) 	mta_tax 	,
+sum(case when 	tip_amount 	 is null then 1 else 0 end) 	tip_amount 	,
+sum(case when 	tolls_amount 	 is null then 1 else 0 end) 	tolls_amount 	,
+sum(case when 	improvement_surcharge 	 is null then 1 else 0 end) 	improvement_surcharge 	,
+sum(case when 	total_amount 	 is null then 1 else 0 end) 	total_amount 	
+from nyc_taxi_cs.Data_Table DT;
+from nyc_taxi_august;
+
+--Above query gives zero null values for all columns meaning no column has null values
+
+--Checking range of data
+select max(VendorID ) maxVendorID	,	min(VendorID ) minVendorID	,
+max(tpep_pickup_datetime ) maxtpep_pickup_datetime	,	min(tpep_pickup_datetime ) mintpep_pickup_datetime	,
+max(tpep_dropoff_datetime ) maxtpep_dropoff_datetime	,	min(tpep_dropoff_datetime ) mintpep_dropoff_datetime	,
+max(passenger_count ) maxpassenger_count	,	min(passenger_count ) minpassenger_count	,
+max(trip_distance ) maxtrip_distance	,	min(trip_distance ) mintrip_distance	,
+max(RatecodeID ) maxRatecodeID	,	min(RatecodeID ) minRatecodeID	,
+max(store_and_fwd_flag ) maxstore_and_fwd_flag	,	min(store_and_fwd_flag ) minstore_and_fwd_flag	,
+max(PULocationID ) maxPULocationID	,	min(PULocationID ) minPULocationID	,
+max(DOLocationID ) maxDOLocationID	,	min(DOLocationID ) minDOLocationID	,
+max(payment_type ) maxpayment_type	,	min(payment_type ) minpayment_type	,
+max(fare_amount ) maxfare_amount	,	min(fare_amount ) minfare_amount	,
+max(extra ) maxextra	,	min(extra ) minextra	,
+max(mta_tax ) maxmta_tax	,	min(mta_tax ) minmta_tax	,
+max(tip_amount ) maxtip_amount	,	min(tip_amount ) mintip_amount	,
+max(tolls_amount ) maxtolls_amount	,	min(tolls_amount ) mintolls_amount	,
+max(improvement_surcharge ) maximprovement_surcharge	,	min(improvement_surcharge ) minimprovement_surcharge	,
+max(total_amount ) maxtotal_amount	,	min(total_amount ) mintotal_amount		
+from nyc_taxi_august;;
+
+-- maxvendorid minvendorid
+-- 2           1                   
+ 
+ 
+ - column which seems to match the data disctionary #############################################################
+-- pulocationid,dolocationid:- pickup and drop location are raning from 1 to 265
+-- payment_type in data is spread between 1-4 which is with provided values of 1
+
+
+--As max_tpep_pickup_datetime is of date 2018-01-01 and minimum pickup time is of date 2003-01-01 both are out of ranges
+--since we are only considering for november and december 2017
+--Checking the number of records which are out of range
+
+
+select vendorid, count(*) as no_of_records from nyc_taxi_august
+where tpep_pickup_datetime < '2017-11-1 00:00:00.0' or tpep_pickup_datetime>= '2018-01-01 00:00:00.0'
+group by vendorid;
+
+--Vendor 2 has faulty data with 14 records out of considered range of date time.
+
+
+--Checking data for column tpep_dropoff_datetime
+--Drop off could have happened next day so drop of time is taken till 2018-01-02
+
+select vendorid, count(*) as no_of_records from nyc_taxi_august
+where tpep_dropoff_datetime < '2017-11-01 00:00:00.0' or tpep_dropoff_datetime>= '2018-01-02 00:00:00.0'
+group by vendorid;
+
+--6 records from vendor 2 are fault and 1 record from vendor 1 is faulty.
+
+--Evaluating for vendorid 1 further
+
+select * from nyc_taxi_august
+where (tpep_dropoff_datetime < '2017-11-01 00:00:00.0' or tpep_dropoff_datetime>= '2018-01-02 00:00:00.0') and vendorid = 1;
+
+--nyc_taxi_august.tpep_pickup_datetime = 2017-11-14 13:50:00.0
+--nyc_taxi_august.tpep_dropoff_datetime = 2019-04-24 19:21:00.0
+--Since pickup is in 2017 and drop off is in 2019 this seems to errorneous data
+
+--Drop off time can't be before or equal to pick up time
+
+select vendorid,count(*) from nyc_taxi_august
+where (tpep_dropoff_datetime <= tpep_pickup_datetime) 
+group by vendorid;
+
+--For Vendor1 3063 records has drop of time before than pick up time and for vendor 2 3492 records has drop of time before than pickup time.
+
+--Evaluating it further for vendor1
+
+select * from nyc_taxi_august
+where (tpep_dropoff_datetime <= tpep_pickup_datetime) 
+and vendorid = 1;
+--Checking the number of times trip distance is zero for vendor 1 if drop of time is before than pick up time
+select count(*) from nyc_taxi_august
+where (tpep_dropoff_datetime <= tpep_pickup_datetime) 
+and vendorid = 1 and trip_distance = 0;
+
+--2558 records has trip distance zero for vendor 1
+
+--Checking the percentage of records with trip distance = 0
+select 100*(2558/3063);
+--Around 84% of records has trip distance = 0 and no additional information is given on scenario we can ignore the records.
+
+--Evaluating it further for vendor2
+
+select * from nyc_taxi_august
+where (tpep_dropoff_datetime <= tpep_pickup_datetime) 
+and vendorid = 2;
+
+--Checking the number of times trip distance is zero for vendor 2 if drop of time is before than pick up time
+select count(*) from nyc_taxi_august
+where (tpep_dropoff_datetime <= tpep_pickup_datetime) 
+and vendorid = 2 and trip_distance = 0;
+
+--2028 records has trip distance zero for vendor 1
+
+select 2028/3492;
+
+--Around 59% of records has trip distance = 0 and no additional information is given on scenario we can ignore the records.
+
+
+--Checking data for column passenger_count
+
+select passenger_count,count(*) as no_of_records
+from nyc_taxi_august
+group by passenger_count
+order by passenger_count;
+
+--Following is the passenger count for different number of passenger
+-- 0	6824
+-- 1	827498
+-- 2	176872
+-- 3	50693
+-- 4	24951
+-- 5	54568
+-- 6	33146
+-- 7	12
+-- 8	3
+-- 9	1
+
+-- passenger count is 0, there may be case where driver didnt enter the passenger details.
+
+-- Checking which vendor is at fault here.
+
+select passenger_count,vendorid,count(*) as no_of_records
+from nyc_taxi_august
+where passenger_count in (0)
+group by vendorid,passenger_count
+order by vendorid;
+
+--passenger_count  Vendorid   no_of_records
+--      0            1        6813
+--      0            2        11 
+
+--Vendorid 1 has a fault in providing 0 passenger count
+
+
+--Checking column trip_distance
+--maxtrip_distance	mintrip_distance
+--126.41           	0
+
+--Checking the vendor who is at fault of providing 0 trip distance
+
+select vendorid,count(*) from 
+nyc_taxi_august
+where trip_distance<=0
+group by vendorid;
+
+
+-- 	vendorid	No of records
+-- 	2	        3185
+-- 	1	        4217
+
+--Both the vendor are equally likely responsinble for providing faulty data
+
+--Checking column RatecodeId
+
+select ratecodeid, count(*) as no_of_records
+from nyc_taxi_august
+group by ratecodeid
+order by ratecodeid;
+
+--Following is the nuumber of records with different ratecodeid
+-- 	ratecodeid	no_of_records
+-- 	1       	1142277
+-- 	2	        25338
+-- 	3	        2562
+-- 	4	        586
+-- 	5	        3793
+-- 	6	        3
+-- 	99	        9
+
+--Ratecodeid 1 to 6 is correct as per data dictionary but need to evaluate for ratecodeid 99 as it is incorrect
+
+--Checking for vendorid who provided 99 ratecodeid
+
+select vendorid, count(*) as no_of_records
+from nyc_taxi_august
+where ratecodeid = 99
+group by vendorid;
+
+
+-- 	vendorid	no_of_records
+--  2	        1
+-- 	1	        8
+ 
+-- Vendor 1 has highest faulty records for ratecodeid
+
+
+----Checking data for column store_and_fwd_flag
+
+select store_and_fwd_flag,count(*) as no_of_records
+from nyc_taxi_august
+group by store_and_fwd_flag;
+
+--store_and_fwd_flag	no_of_records
+	N	                1170617
+	Y	                3951
+
+--There is no faulty data present in column store_and_fwd_flag
+
+--Evaluating column payment_type
+
+select payment_type, count(*) as no_of_records
+from nyc_taxi_august
+group by payment_type
+order by payment_type;
+
+--All payment types are in between 1 to 4 which as per the data dictionary so there is no faulty data in column payment_types
+
+--Evaluating column Fare amount
+select count(*)
+from nyc_taxi_august
+where fare_amount<0;
+
+--558 records has values less than 0 which is errorneus data as fare amount cannot be less than zero
+
+--Checking the vendor which provided errorneus data
+
+select vendorid, count(*) from nyc_taxi_august
+where fare_amount<0
+group by vendorid;
+
+--All 558 errorneus records are provided by vendor 2
+
+select extra, count(*) as no_of_records
+from nyc_taxi_august
+group by extra;
+
+--Extra  No of records
+--     -4.5	5
+-- 	-0.5	193
+-- 	 0  	631872
+-- 	0.3	    36
+-- 	0.5	    363454
+-- 	1.3	    13
+-- 	1.5	    2
+-- 	2	    1
+-- 	4.5	    4502
+--     -10.6	1
+-- 	-1  	87
+-- 	0.8	    15
+-- 	1	    174386
+-- 	4.8	    1
+ 
+--As per the data dictionary Extra column should contain only $0.5 and $1 as values but their are other values also present
+--In those values value 0 has high number of records.
+
+--Evaluating the vendor which is providing faluty records
+
+select vendorid,count(*) as no_of_records
+from nyc_taxi_august
+where extra not in (0,0.5,1)
+group by vendorid;
+
+
+--  vendorid	no_of_records
+-- 	2       	3033
+-- 	1	        1823
+
+--Both Vendor 1 and 2 has records of column extra not in range and we don't have extra information to look into further. 
+
+
+--Evaluating Mta_tax column
+
+select mta_tax,count(*) as No_of_records
+from nyc_taxi_august
+group by mta_tax;
+
+--Following are values present in mta_tax column
+--  	mta_tax	no_of_records
+-- 	-0.5    544
+-- 	0	    5197
+-- 	0.5	    1168823
+-- 	3	    3
+-- 	11.4	1
+
+--$0.5 is the only value of tax that is to be present as per data dictionary but column contains other values also.
+
+--Evaluating column further to know faulty vendor for column mta_tax
+
+select vendorid , count(*) as no_of_records
+from nyc_taxi_august
+where mta_tax not in (0.5)
+group by vendorid;
+
+--Following shows the no of records for each vendor id having mta tax value other than 0.50
+-- 	vendorid	no_of_records
+-- 	2       	3033
+-- 	1	        2712
+
+--Both vendors are responsinble for providing faulty records.
+
+
+-- improvement_surcharge
+-- max_improvement_surcharge   min_improvement_surcharge
+--  		1                 -0.3
+-- Data Dictionary :- $0.30 improvement surcharge assessed trips at the flag drop. 
+-- The improvement surcharge began being levied in 2015. 
+select count(*) as count from  nyc_taxi_august where improvement_surcharge not in (0,0.3);
+
+-- only 562 can be easily ignored
+
+-- Evaluting vendor wise
+select vendorid,count(*) as count from  nyc_taxi_august
+where improvement_surcharge not in (0,0.3) 
+group by vendorid;
+
+-- All records belong to vendor 2.
+
+-- Checking for column tip_amount
+
+select count(*) as no_of_records
+from  nyc_taxi_august
+where tip_amount <0;
+
+-- 4  : number of records are less, can be ignored.
+
+-- Evaluating vendor for faulty data
+
+select vendorid,count(*) as no_of_records
+from  nyc_taxi_august
+where tip_amount <0
+group by vendorid;
+
+-- All 4 records belongs to vendor 2
+
+-- CheckIG if there are non credit card based tips
+select count(*) as no_of_records 
+from  nyc_taxi_august
+where Payment_type!=1 and tip_amount>0;
+
+-- 17 records have payment mode other than credit and have tip amount greater than 0,hence ignoring these records.
+
+select vendorid,count(*) as no_of_records 
+from  nyc_taxi_august
+where Payment_type!=1 and tip_amount>0  group by vendorid;
+
+-- All 17 records belong to vendor 1
+
+
+-- Evaluating toll amount tolls_amount
+--AAs per data dictionary toll amount column cannot have negative value
+select vendorid,count(*) as no_of_records
+from  nyc_taxi_august 
+where tolls_amount <0
+group by vendorid;
+
+-- All 3 faulty record belong to vendor2.
+
+--Evaluating Total amount column
+select count(*) as no_of_records
+from  nyc_taxi_august
+where total_amount<0;
+
+--558 records has value less than zero
+
+--Evaluating vendor who is supplying faluty records
+
+select vendorid,count(*) 
+from  nyc_taxi_august
+where total_amount<0 
+group by vendorid;
+
+--All faulty records belongs to vendor 2
+
+
+-- Basic Data Quality Checks
+-- 3.You might have encountered unusual or erroneous rows in the dataset. 
+-- Can you conclude which vendor is doing a bad job in providing the records using different columns of the dataset? Summarise your conclusions based on every column where these errors are present.
+-- For example,  There are unusual passenger count i.e 0 or 192 which is unusual.
+
+-- Below is the list for vendor1 of faulty data
+-- tpep_dropoff_datetime 
+-- tpep_dropoff_datetime<=DT.tpep_pickup_datetime
+-- passenger_count 
+-- trip_distance
+-- ratecodeid
+-- extra 
+-- mta_tax 
+
+
+-- Below is the list for vendor2 of faulty data
+--tpep_pickup_datetime
+--tpep_dropoff_datetime 
+--tpep_dropoff_datetime<=DT.tpep_pickup_datetime
+--passenger_count 
+--trip_distance
+--ratecodeid
+--fareamount
+--extra 
+--mta_tax 
+--tip_amount 
+--tolls_amount 
+--improvement_surcharge 
+--total_amount<0 
+
+-- But overall Vendor 2 is providing incorrect data.
+
+use nyc_taxi_0714;
+
+
+--Partioning is done on month wise as we need to consider only 2 months, year is not required
+--Second partition is based on Vendor , for our analysis
+
+--drop table if exists
+drop table nyc_taxi_august_Partition;
+
+Create external table if not exists nyc_taxi_august_Partition(
+tpep_pickup_datetime timestamp,
+tpep_dropoff_datetime timestamp,
+passenger_count int,
+trip_distance decimal(10,2),
+RatecodeID int,
+store_and_fwd_flag string,
+PULocationID int,
+DOLocationID int,
+payment_type int,
+fare_amount decimal(10,2),
+extra decimal(10,2),
+mta_tax decimal(10,2),
+tip_amount decimal(10,2),
+tolls_amount decimal(10,2),
+improvement_surcharge decimal(10,2),
+total_amount decimal(10,2)
+)
+partitioned by (Mnth int,VendorID int)
+stored as orc location '/user/hive/warehouse/s.rohit.joshi_gmail'
+tblproperties ("orc.compress"="SNAPPY");
+
+
+-- Posting data
+insert overwrite table nyc_taxi_august_Partition partition(Mnth,VendorID)
+select 
+tpep_pickup_datetime,
+tpep_dropoff_datetime,
+passenger_count,
+trip_distance,
+RatecodeID,
+store_and_fwd_flag,
+PULocationID,
+DOLocationID,
+payment_type,
+fare_amount,
+extra,
+mta_tax,
+tip_amount,
+tolls_amount,
+improvement_surcharge,
+total_amount,
+month(tpep_pickup_datetime) Mnth,
+VendorID
+from  nyc_taxi_august
+where  (tpep_pickup_datetime >='2017-11-1 00:00:00.0' and tpep_pickup_datetime<'2018-01-01 00:00:00.0') and
+(tpep_dropoff_datetime >= '2017-11-1 00:00:00.0' and tpep_dropoff_datetime<'2018-01-02 00:00:00.0') and
+(tpep_dropoff_datetime>tpep_pickup_datetime) and
+(passenger_count not in (0)) and
+(trip_distance>0) and 
+(ratecodeid!=99) and
+(fare_amount>0 ) and
+ (extra in (0,0.5,1)) and
+ (mta_tax  in (0,0.5)) and 
+((tip_amount >=0 and Payment_type=1) or (Payment_type!=1 and tip_amount=0)) and
+( tolls_amount >=0) and
+( improvement_surcharge in (0,0.3)) and
+(total_amount>0 ) ;
+
+
+select * from nyc_taxi_august_Partition;
+
+select count(*) from nyc_taxi_august_Partition;
+
+select count(*) from nyc_taxi_august;
+
+--1153586 rows got filtered in partition table
+
+select 1174568 - 1153568;
+
+--21000 are faulty records
+
+select 100*(21000/1174568);
+
+--Around 1.78% records were removed after partitioning
+
+
+-- Analysis-I 
+
+-- 1 .Compare the overall average fare per trip for November and December.
+
+select mnth,round(avg(total_amount),2) as Avg_total_amount,round(avg(fare_amount),2) as Avg_fare_amount
+from nyc_taxi_august_Partition  group by mnth;
+
+
+-- 	mnth	avg_total_amount	avg_fare_amount
+-- 	11	    16.19	            12.91
+-- 	12	    15.89	            12.7
+
+select 16.19-15.89;
+--0.30
+select 12.91-12.7;
+--0.21
+
+-- Month November seems to be better considering total amount.
+--However there is greater difference in total amount and fare amount for november this indicates
+--high taxes being implied in month on november.
+
+select * from nyc_taxi_august_partition;
+
+-- 2. Explore the number of passengers per trip - how many trips are made by each level of Passenger_count?
+
+select passenger_count, count(*) as No_of_records
+from nyc_taxi_august_Partition
+group by passenger_count;
+
+--Following table shows the number of trips made by different passenger count
+ 	passenger_count	no_of_records
+	1	            817018
+	2	            174783
+	3	            50183
+	4	            24680
+	5	            54037
+	6	            32882
+	7               3
+	
+--Do most people travel solo or with other people?
+--Records with passenger count 1 are highest which indicates that most people travel solo
+
+-- 3.Which is the most preferred mode of payment?
+
+Select payment_type, count(*) as No_of_records
+from nyc_taxi_august_Partition
+group by payment_type;
+
+--Following are thr records with mode of payments
+--  payment_type	no_of_records
+-- 	1	            779153
+-- 	2	            368658
+-- 	3	            4480
+-- 	4	            1295
+
+--Payment tyoe 1 which is credit card is the most preferred mode of payment
+
+
+
+--
